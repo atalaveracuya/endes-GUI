@@ -1,6 +1,5 @@
 # endes-GUI
 Replico indicadores de la Encuesta Nacional Demográfica y Salud Familiar  (ENDES) de INEI Perú. El proceso de descarga de datos, se basa en el código de Edinson Tolentino (EduTole) https://github.com/EduTole/Indicadores/blob/master/Sesion-1/Do_S1_3.do
-https://github.com/EduTole/Indicadores/blob/master/Sesion-1/Do_S1_3.do
 
 Asimismo, los documentos que se usó para contrastar resultados son los siguientes:
 
