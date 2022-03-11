@@ -356,20 +356,19 @@ tab hc61
 *replace hc61=hv106 if hc61==.
 
 *Madre sin educación formal
-gen madre_sin_educ=(hc61==0)
+gen madre_sin_educ=(mother_edu==0)
 tab madre_sin_educ
 
 *Madre con educación primaria completa
-gen madre_educ_prim=(hc61==1)
+gen madre_educ_prim=(mother_edu==1)
 tab madre_educ_prim
 
 *Madre con educación secundaria completa
-gen madre_educ_sec=(hc61==2)
+gen madre_educ_sec=(mother_edu==2)
 tab madre_educ_sec 
 
-
 *Madre con educación superior completa 
-gen madre_educ_sup=(hc61==3)
+gen madre_educ_sup=(mother_edu==3)
 tab madre_educ_sup
   
 
