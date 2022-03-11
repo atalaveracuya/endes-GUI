@@ -149,9 +149,38 @@ save "${clean}/rech1_2012_temp",replace
 
 cd "${path}/REC42"
 use rec42_2012.dta ,clear 
+des caseid /*Identificación de la mujer*/
 des v481 /* Cobertura de seguro de salud si no*/ 
-gen seguro_sis = v481g==1 /*seguro integral de salud*/
+gen seguro=v481==1 
+la def r 1 "tiene" 0 "no tiene"
+la val seguro  r
 gen seguro_essalud = v481e==1 /*ESSALUD/IPSS*/
+gen seguro_sis = v481g==1     /*seguro integral de salud*/
+
+keep caseid v481 seguro seguro_sis seguro_essalud  v447a 
+merge 1:1 caseid using "${path}/REC0111/rec0111_2012.dta" , keepusing(caseid  v001 v005 v013 v024 v013) 
+drop if _merge==2 
+drop _merge 
+gen hhid = substr(caseid,1,15)
+merge m:1 hhid using "${path}/rech0/rech0_2012.dta", keepusing(hhid hv025) 
+
+gen wt = v005/1000000
+gen cluster= v001
+gen region= v024
+
+tab v013 /*grupo de edad*/ 
+la def v013 1 "15-19" 2 "20-24" 3 "25-29" 4 "30-34" 5 "35-39" 6 "40-44" 7 "45-49" 
+la val v013 v013 
+
+recode hv025 (1=1 "urbano") (0=2 "rural"), gen(area) 
+la var area "Tipo de lugar de residencia"
+
+***********************************************************************
+svyset cluster [pweight=wt], strata(region) 
+***********************************************************************
+svy: tab v013 seguro_sis , row 
+svy: tab area seguro_sis  , row 
+svy: tab area seguro , row 
 
 
 *** ==================================================================
@@ -165,8 +194,17 @@ gen hhid = substr(caseid,1,15)
 gen hc0 = substr(caseid,16,17)
 keep hhid hc0 caseid s108*  s484 
 destring hc0,replace 
-tab s108n 
-save  "${clean}/rec91_2012_temp.dta",replace  
+fre s108n 
+fre s484 
+recode s484 (1/2=1 "si") (3=0 "no") (8=.), gen(p_juntos)
+tab p_juntos 
+collapse (max) p_juntos , by(hhid)
+
+la var p_juntos "Al menos un miembro del hogar se encuentra afiliado o incorporado en el programa JUNTOS"
+tab p_juntos 
+
+save  "${clean}/p_juntos_2012_temp.dta",replace  
+
 *** ==================================================================
 ***  RECH5 Ausencia de la madre en el hogar   
 *** ==================================================================
@@ -253,19 +291,27 @@ tempfile main
 save "`main'"
 
 
-*educación del miembro del hogar
-keep hhid hc0 hv109 
+*educación del miembro del hogar y edad (hv105) 
+keep hhid hc0 hv106 hv105 
 
 * cambiar el nombre para que coincida con los códigos madre
 rename hc0 hv112 
-rename hv109 mother_edu
-
+rename hv106 mother_edu
+rename hv105 mother_edad
+ 
 * use merge para adjuntar la educación de la madre
 merge 1:m hhid hv112  using "`main'", keep(match using) nogen
 
-keep hhid hv112  mother_edu hc0 
+keep hhid hv112  mother_edu mother_edad hc0 
 isid hhid hc0, sort
 save "${clean}/educ_madre_temp",replace 
+
+
+use educ_madre_temp,clear 
+merge m:1 hhid hc0 using rech1_2012_temp, keepusing(hhid hc0 hv106) nogen
+*replace mother_edu=hv106 if hv112==0
+save "${clean}/educ_madre_temp",replace 
+
 
 
 *** ==================================================================
@@ -287,24 +333,57 @@ drop _merge
 merge 1:1 hhid hc0 using educ_madre_temp
 keep if _merge==3
 drop _merge 
+merge m:1 hhid using p_juntos_2012_temp.dta
+drop if _merge==2 
 
 
 recode hc1 (0/5=1) (6/8=2) (9/11=3) (12/17=4) (18/23=5) (24/35=6) (36/47=7) (48/59=8), gen(edadm)
 label define edadm 1"0-5" 2"6-8" 3"9-11" 4"12-17" 5"18-23" 6"24-35" 7"36-47" 8"48-59"
 label val edadm edadm 
 
+rename hv105 edad_niño  
+la var edad_niño "Edad actual del niño en años completos"
+
+rename mother_edad edad_madre
+la var edad_madre "Edad de la madre"
+
+
+tab mother_edu
+tab hc61
+
+
+*educacion de la madre 
+*replace hc61=hv106 if hc61==.
+
+*Madre sin educación formal
+gen madre_sin_educ=(hc61==0)
+tab madre_sin_educ
+
+*Madre con educación primaria completa
+gen madre_educ_prim=(hc61==1)
+tab madre_educ_prim
+
+*Madre con educación secundaria completa
+gen madre_educ_sec=(hc61==2)
+tab madre_educ_sec 
+
+
+*Madre con educación superior completa 
+gen madre_educ_sup=(hc61==3)
+tab madre_educ_sup
+  
 
 recode hv025 (1=1 "urbano") (0=2 "rural"), gen(area) 
 la var area "Tipo de lugar de residencia"
 
-recode  hv104 (2=1 "Mujer") (1=0 "Hombre"), gen(sexo)
-la var sexo "Sexo"
+recode  hv104 (2=1 "Mujer") (1=0 "Hombre"), gen(mujer)
+la var mujer "Mujer"
 
 recode hc64 (1=1 "1") (2/3=2 "2-3") (4/5=3 "4-5") (6/max=4 "6+") , gen(orden)
 la var orden "Orden de nacimiento" 
 
-fre sh227
-fre hv201
+*SIS (al menos un miembro del hogar)
+
 
 gen rt_1=.
 replace  rt_1=1 if sh227==1 
@@ -354,11 +433,11 @@ la var nv_anemia "tipo de anemia"
 
 tab area anemia [iw=peso], row 
 tab edadm anemia [iw=peso], row nofreq
-tab sexo anemia [iw=peso], row nofreq
+tab mujer anemia [iw=peso], row nofreq
 tab orden anemia [iw=peso], row nofreq
 tab area  nv_anemia [iw=peso] , row nofreq
 tab edadm nv_anemia [iw=peso] , row nofreq
-tab sexo  nv_anemia [iw=peso] , row nofreq
+tab mujer  nv_anemia [iw=peso] , row nofreq
 tab orden nv_anemia [iw=peso], row nofreq
 tab sh42 anemia [iw=peso], row nofreq
 tab rt_1 anemia [iw=peso], row nofreq
@@ -370,17 +449,16 @@ tab hc61 anemia [iw=peso], row nofreq
 fre nv_anemia
 
 
-*nivel de educacion de la madre 
+tab mother_edu anemia,m 
+tab mother_edu anemia  [iw=peso],  row nofreq
+tab hc61 anemia [iw=peso], row nofreq
+tab hc61 anemia [iw=peso], row nofreq
+tab  mother_edu anemia [iw=peso], row nofreq
 
-recode mother_edu (0=0 "Sin educación") (1/2=1 "Primaria") (3/4=2 "Secundaria") (5=3 "Superior") , gen(rmother_edu) 
-replace rmother_edu=hv109 if rmother_edu==. 
-la var  rmother_edu  "Nivel de educación"
- 
-tab rmother_edu anemia,m 
-tab rmother_edu anemia  [iw=peso],  row nofreq
-
-
-exit 
+replace mother_edu =hc61 if mother_edu==8
+tab  mother_edu anemia  [iw=peso], row nofreq
+tab  hc61 anemia [iw=peso], row nofreq
+ex
 
 ****************************************************.
 
